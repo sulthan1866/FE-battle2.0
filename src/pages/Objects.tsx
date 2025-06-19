@@ -1,21 +1,44 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 
-const Objects = () => {
-    const mountRef = useRef(null);
-    const sceneRef = useRef(null);
-    const rendererRef = useRef(null);
-    const cameraRef = useRef(null);
-    const objectsRef = useRef([]);
-    const mouseRef = useRef({ x: 0, y: 0 });
-    const particleSystemRef = useRef(null);
-    const [selectedObject, setSelectedObject] = useState(null);
-    const [isMouseDown, setIsMouseDown] = useState(false);
-    const [objectCount, setObjectCount] = useState({ cross: 0, cylinder: 0, complex: 0 });
-    const [showStats, setShowStats] = useState(true);
-    const [renderMode, setRenderMode] = useState('normal');
+interface ObjectUserData {
+    type: 'cross' | 'cylinder' | 'complex';
+    originalColor: number;
+    baseScale: number;
+    targetScale: number;
+    velocity: THREE.Vector3;
+    rotationVelocity: THREE.Vector3;
+    energy: number;
+    lastInteraction: number;
+    isGlass?: boolean;
+    orbitSpeed?: number;
+    orbitAngle?: number;
+    orbitRadius?: number;
+}
 
-    const createParticleSystem = useCallback(() => {
+interface ObjectCount {
+    cross: number;
+    cylinder: number;
+    complex: number;
+}
+
+type SceneObject = THREE.Group | THREE.Mesh;
+
+const Objects = () => {
+    const mountRef = useRef<HTMLDivElement>(null);
+    const sceneRef = useRef<THREE.Scene | null>(null);
+    const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+    const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+    const objectsRef = useRef<SceneObject[]>([]);
+    const particleSystemRef = useRef<THREE.Points | null>(null);
+    const mouseRef = useRef({ x: 0, y: 0 });
+    const [selectedObject, setSelectedObject] = useState<SceneObject | null>(null);
+    const [isMouseDown, setIsMouseDown] = useState(false);
+    const [objectCount, setObjectCount] = useState<ObjectCount>({ cross: 0, cylinder: 0, complex: 0 });
+    const [showStats, setShowStats] = useState(true);
+    const [renderMode, setRenderMode] = useState<'normal' | 'wireframe'>('normal');
+
+    const createParticleSystem = useCallback((): THREE.Points => {
         const particleCount = 200;
         const particles = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
@@ -69,7 +92,7 @@ const Objects = () => {
         cameraRef.current = camera;
 
         // Enhanced renderer setup
-        const renderer = new THREE.WebGLRenderer({
+        const renderer = new THREE.WebGLRenderer({ 
             antialias: true,
             powerPreference: "high-performance"
         });
@@ -117,8 +140,8 @@ const Objects = () => {
         particleSystemRef.current = particleSystem;
 
         // Create interactive objects with enhanced materials
-        const objects = [];
-        let counts = { cross: 0, cylinder: 0, complex: 0 };
+        const objects: SceneObject[] = [];
+        const counts: ObjectCount = { cross: 0, cylinder: 0, complex: 0 };
 
         // Enhanced Cross/Plus shapes with metallic finish
         for (let i = 0; i < 4; i++) {
@@ -176,7 +199,7 @@ const Objects = () => {
                 Math.random() * Math.PI
             );
 
-            group.userData = {
+            const userData: ObjectUserData = {
                 type: 'cross',
                 originalColor: 0x4169E1,
                 baseScale: 1,
@@ -195,6 +218,8 @@ const Objects = () => {
                 lastInteraction: 0
             };
 
+            group.userData = userData;
+
             scene.add(group);
             objects.push(group);
             counts.cross++;
@@ -204,8 +229,8 @@ const Objects = () => {
         for (let i = 0; i < 5; i++) {
             const isGlass = i % 3 === 0;
             const geometry = new THREE.CylinderGeometry(0.6, 0.6, 2, 16);
-
-            const material = isGlass
+            
+            const material = isGlass 
                 ? new THREE.MeshPhysicalMaterial({
                     color: 0xffffff,
                     metalness: 0.0,
@@ -231,7 +256,7 @@ const Objects = () => {
                 metalness: 0.9,
                 roughness: 0.1
             });
-
+            
             const topCap = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.65, 0.65, 0.1, 16),
                 capMaterial
@@ -258,7 +283,7 @@ const Objects = () => {
                 Math.random() * Math.PI
             );
 
-            cylinder.userData = {
+            const userData: ObjectUserData = {
                 type: 'cylinder',
                 originalColor: isGlass ? 0xffffff : material.color.getHex(),
                 baseScale: 1,
@@ -277,6 +302,8 @@ const Objects = () => {
                 lastInteraction: 0,
                 isGlass
             };
+
+            cylinder.userData = userData;
 
             scene.add(cylinder);
             objects.push(cylinder);
@@ -313,15 +340,19 @@ const Objects = () => {
                     })
                 );
                 satellite.castShadow = true;
-
+                
                 const angle = (j / satelliteCount) * Math.PI * 2;
                 satellite.position.set(
                     Math.cos(angle) * 1.5,
                     Math.sin(angle) * 0.3,
                     Math.sin(angle) * 1.5
                 );
-
-                satellite.userData = { orbitAngle: angle, orbitRadius: 1.5 };
+                
+                const satelliteData: Partial<ObjectUserData> = { 
+                    orbitAngle: angle, 
+                    orbitRadius: 1.5 
+                };
+                satellite.userData = satelliteData;
                 group.add(satellite);
             }
 
@@ -333,7 +364,7 @@ const Objects = () => {
                 (Math.random() - 0.5) * 6
             );
 
-            group.userData = {
+            const userData: ObjectUserData = {
                 type: 'complex',
                 originalColor: 0x696969,
                 baseScale: 1,
@@ -353,6 +384,8 @@ const Objects = () => {
                 orbitSpeed: 0.02 + Math.random() * 0.02
             };
 
+            group.userData = userData;
+
             scene.add(group);
             objects.push(group);
             counts.complex++;
@@ -365,8 +398,38 @@ const Objects = () => {
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
 
+        // Type-safe helper functions
+        const isMesh = (obj: THREE.Object3D): obj is THREE.Mesh => {
+            return obj instanceof THREE.Mesh;
+        };
+
+        const isGroup = (obj: THREE.Object3D): obj is THREE.Group => {
+            return obj instanceof THREE.Group;
+        };
+
+        const setObjectEmissive = (obj: SceneObject, color: number) => {
+            if (isMesh(obj) && obj.material instanceof THREE.MeshPhysicalMaterial) {
+                obj.material.emissive.setHex(color);
+            } else if (isGroup(obj)) {
+                obj.children.forEach((child) => {
+                    if (isMesh(child) && child.material instanceof THREE.MeshPhysicalMaterial) {
+                        const userData = (obj.userData as ObjectUserData);
+                        if (userData.type === 'cross') {
+                            child.material.emissive.setHex(color);
+                        } else if (userData.type === 'complex') {
+                            const satelliteData = child.userData as Partial<ObjectUserData>;
+                            child.material.emissive.setHex(
+                                satelliteData.orbitAngle !== undefined ? 
+                                child.material.color.getHex() * 0.1 : color
+                            );
+                        }
+                    }
+                });
+            }
+        };
+
         // Improved mouse interaction
-        const onMouseMove = (event) => {
+        const onMouseMove = (event: MouseEvent) => {
             event.preventDefault();
 
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -380,50 +443,19 @@ const Objects = () => {
 
                 // Reset all objects
                 objects.forEach(obj => {
-                    obj.userData.targetScale = obj.userData.baseScale;
-
-                    if (obj.userData.type === 'cross') {
-                        obj.children.forEach(child => {
-                            if (child.material) {
-                                child.material.emissive.setHex(0x000000);
-                            }
-                        });
-                    } else if (obj.userData.type === 'complex') {
-                        obj.children.forEach(child => {
-                            if (child.material) {
-                                child.material.emissive.setHex(
-                                    child.userData?.orbitAngle !== undefined ?
-                                        child.material.color.getHex() * 0.1 : 0x000000
-                                );
-                            }
-                        });
-                    } else if (obj.material) {
-                        obj.material.emissive.setHex(0x000000);
-                    }
+                    const userData = obj.userData as ObjectUserData;
+                    userData.targetScale = userData.baseScale;
+                    setObjectEmissive(obj, 0x000000);
                 });
 
                 if (intersects.length > 0) {
-                    const intersectedObject = intersects[0].object.parent || intersects[0].object;
+                    const intersectedObject = (intersects[0].object.parent || intersects[0].object) as SceneObject;
                     setSelectedObject(intersectedObject);
 
                     // Enhanced hover effects
-                    intersectedObject.userData.targetScale = 1.2;
-
-                    if (intersectedObject.userData.type === 'cross') {
-                        intersectedObject.children.forEach(child => {
-                            if (child.material) {
-                                child.material.emissive.setHex(0x440044);
-                            }
-                        });
-                    } else if (intersectedObject.userData.type === 'complex') {
-                        intersectedObject.children.forEach(child => {
-                            if (child.material) {
-                                child.material.emissive.setHex(0x404040);
-                            }
-                        });
-                    } else if (intersectedObject.material) {
-                        intersectedObject.material.emissive.setHex(0x444400);
-                    }
+                    const userData = intersectedObject.userData as ObjectUserData;
+                    userData.targetScale = 1.2;
+                    setObjectEmissive(intersectedObject, 0x440044);
 
                     document.body.style.cursor = 'pointer';
                 } else {
@@ -433,7 +465,7 @@ const Objects = () => {
             }
         };
 
-        const onMouseDown = (event) => {
+        const onMouseDown = (event: MouseEvent) => {
             setIsMouseDown(true);
 
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -443,8 +475,8 @@ const Objects = () => {
             const intersects = raycaster.intersectObjects(objects, true);
 
             if (intersects.length > 0) {
-                const intersectedObject = intersects[0].object.parent || intersects[0].object;
-                const currentTime = Date.now();
+                const intersectedObject = (intersects[0].object.parent || intersects[0].object) as SceneObject;
+                const userData = intersectedObject.userData as ObjectUserData;
 
                 // Enhanced click effects
                 const impulse = new THREE.Vector3(
@@ -452,25 +484,16 @@ const Objects = () => {
                     (Math.random() - 0.5) * 0.15,
                     (Math.random() - 0.5) * 0.15
                 );
-                intersectedObject.userData.velocity.add(impulse);
+                userData.velocity.add(impulse);
 
                 // Increase energy and rotation
-                intersectedObject.userData.energy = Math.min(intersectedObject.userData.energy + 0.5, 2.0);
-                intersectedObject.userData.rotationVelocity.multiplyScalar(1.8);
-                intersectedObject.userData.lastInteraction = currentTime;
+                userData.energy = Math.min(userData.energy + 0.5, 2.0);
+                userData.rotationVelocity.multiplyScalar(1.8);
+                userData.lastInteraction = Date.now();
 
                 // Visual feedback
-                intersectedObject.userData.targetScale = 1.5;
-
-                if (intersectedObject.material) {
-                    intersectedObject.material.emissive.setHex(0xff4444);
-                } else {
-                    intersectedObject.children.forEach(child => {
-                        if (child.material) {
-                            child.material.emissive.setHex(0xff4444);
-                        }
-                    });
-                }
+                userData.targetScale = 1.5;
+                setObjectEmissive(intersectedObject, 0xff4444);
             }
         };
 
@@ -484,47 +507,48 @@ const Objects = () => {
         renderer.domElement.addEventListener('mouseup', onMouseUp);
 
         // Enhanced animation loop
-        let animationId;
+        let animationId: number | undefined;
         const animate = () => {
             animationId = requestAnimationFrame(animate);
 
-            const currentTime = Date.now();
-
             // Update objects with enhanced physics
             objects.forEach(obj => {
+                const userData = obj.userData as ObjectUserData;
+
                 // Apply velocity with gravity-like effect
-                obj.position.add(obj.userData.velocity);
-                obj.userData.velocity.y -= 0.001; // Subtle gravity
+                obj.position.add(userData.velocity);
+                userData.velocity.y -= 0.001; // Subtle gravity
 
                 // Apply rotation
-                obj.rotation.x += obj.userData.rotationVelocity.x;
-                obj.rotation.y += obj.userData.rotationVelocity.y;
-                obj.rotation.z += obj.userData.rotationVelocity.z;
+                obj.rotation.x += userData.rotationVelocity.x;
+                obj.rotation.y += userData.rotationVelocity.y;
+                obj.rotation.z += userData.rotationVelocity.z;
 
                 // Enhanced damping based on energy
-                const energyDamping = 0.985 + (obj.userData.energy * 0.01);
-                obj.userData.velocity.multiplyScalar(energyDamping);
-                obj.userData.rotationVelocity.multiplyScalar(0.92);
+                const energyDamping = 0.985 + (userData.energy * 0.01);
+                userData.velocity.multiplyScalar(energyDamping);
+                userData.rotationVelocity.multiplyScalar(0.92);
 
                 // Energy decay
-                obj.userData.energy *= 0.99;
+                userData.energy *= 0.99;
 
                 // Scale animation
                 const currentScale = obj.scale.x;
-                const targetScale = obj.userData.targetScale;
+                const targetScale = userData.targetScale;
                 const newScale = currentScale + (targetScale - currentScale) * 0.1;
                 obj.scale.setScalar(newScale);
 
                 // Complex object satellite orbiting
-                if (obj.userData.type === 'complex') {
-                    obj.children.forEach(child => {
-                        if (child.userData?.orbitAngle !== undefined) {
-                            child.userData.orbitAngle += obj.userData.orbitSpeed;
-                            const radius = child.userData.orbitRadius;
+                if (userData.type === 'complex' && isGroup(obj)) {
+                    obj.children.forEach((child) => {
+                        const childUserData = child.userData as Partial<ObjectUserData>;
+                        if (childUserData.orbitAngle !== undefined && childUserData.orbitRadius !== undefined) {
+                            childUserData.orbitAngle += userData.orbitSpeed || 0.02;
+                            const radius = childUserData.orbitRadius;
                             child.position.set(
-                                Math.cos(child.userData.orbitAngle) * radius,
-                                Math.sin(child.userData.orbitAngle) * 0.3,
-                                Math.sin(child.userData.orbitAngle) * radius
+                                Math.cos(childUserData.orbitAngle) * radius,
+                                Math.sin(childUserData.orbitAngle) * 0.3,
+                                Math.sin(childUserData.orbitAngle) * radius
                             );
                         }
                     });
@@ -532,11 +556,11 @@ const Objects = () => {
 
                 // Enhanced boundary collision with energy transfer
                 const bounds = { x: 8, y: 6, z: 4 };
-                ['x', 'y', 'z'].forEach(axis => {
+                (['x', 'y', 'z'] as const).forEach(axis => {
                     if (Math.abs(obj.position[axis]) > bounds[axis]) {
-                        obj.userData.velocity[axis] *= -0.7;
+                        userData.velocity[axis] *= -0.7;
                         obj.position[axis] = Math.sign(obj.position[axis]) * bounds[axis];
-                        obj.userData.energy += 0.1;
+                        userData.energy += 0.1;
                     }
                 });
             });
@@ -550,33 +574,27 @@ const Objects = () => {
             // Enhanced camera movement with smoothing
             const targetX = mouseRef.current.x * 3;
             const targetY = -mouseRef.current.y * 2 + 2;
-
+            
             camera.position.x += (targetX - camera.position.x) * 0.03;
             camera.position.y += (targetY - camera.position.y) * 0.03;
             camera.lookAt(0, 0, 0);
 
             // Apply render mode effects
-            if (renderMode === 'wireframe') {
-                objects.forEach(obj => {
-                    if (obj.material) {
-                        obj.material.wireframe = true;
-                    } else {
-                        obj.children.forEach(child => {
-                            if (child.material) child.material.wireframe = true;
-                        });
-                    }
-                });
-            } else {
-                objects.forEach(obj => {
-                    if (obj.material) {
-                        obj.material.wireframe = false;
-                    } else {
-                        obj.children.forEach(child => {
-                            if (child.material) child.material.wireframe = false;
-                        });
-                    }
-                });
-            }
+            const applyWireframe = (obj: SceneObject, wireframe: boolean) => {
+                if (isMesh(obj) && obj.material instanceof THREE.MeshPhysicalMaterial) {
+                    obj.material.wireframe = wireframe;
+                } else if (isGroup(obj)) {
+                    obj.children.forEach((child) => {
+                        if (isMesh(child) && child.material instanceof THREE.MeshPhysicalMaterial) {
+                            child.material.wireframe = wireframe;
+                        }
+                    });
+                }
+            };
+
+            objects.forEach(obj => {
+                applyWireframe(obj, renderMode === 'wireframe');
+            });
 
             renderer.render(scene, camera);
         };
@@ -594,37 +612,40 @@ const Objects = () => {
 
         // Cleanup
         return () => {
-            if (animationId) {
+            if (animationId !== undefined) {
                 cancelAnimationFrame(animationId);
             }
-
+            
             window.removeEventListener('resize', handleResize);
             renderer.domElement.removeEventListener('mousemove', onMouseMove);
             renderer.domElement.removeEventListener('mousedown', onMouseDown);
             renderer.domElement.removeEventListener('mouseup', onMouseUp);
 
-            if (mountRef.current && renderer.domElement) {
+            if (mountRef.current && renderer.domElement.parentNode === mountRef.current) {
                 mountRef.current.removeChild(renderer.domElement);
             }
 
             // Enhanced cleanup
             objects.forEach(obj => {
-                if (obj.geometry) obj.geometry.dispose();
-                if (obj.material) {
-                    if (Array.isArray(obj.material)) {
-                        obj.material.forEach(mat => mat.dispose());
-                    } else {
-                        obj.material.dispose();
+                if (isMesh(obj)) {
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) {
+                        if (Array.isArray(obj.material)) {
+                            obj.material.forEach((mat) => mat.dispose());
+                        } else {
+                            obj.material.dispose();
+                        }
                     }
-                }
-                if (obj.children) {
-                    obj.children.forEach(child => {
-                        if (child.geometry) child.geometry.dispose();
-                        if (child.material) {
-                            if (Array.isArray(child.material)) {
-                                child.material.forEach(mat => mat.dispose());
-                            } else {
-                                child.material.dispose();
+                } else if (isGroup(obj)) {
+                    obj.children.forEach((child) => {
+                        if (isMesh(child)) {
+                            if (child.geometry) child.geometry.dispose();
+                            if (child.material) {
+                                if (Array.isArray(child.material)) {
+                                    child.material.forEach((mat) => mat.dispose());
+                                } else {
+                                    child.material.dispose();
+                                }
                             }
                         }
                     });
@@ -642,7 +663,7 @@ const Objects = () => {
             {/* Enhanced UI Overlay */}
             <div className="absolute top-4 left-4 text-white bg-black bg-opacity-70 p-4 rounded-xl backdrop-blur-md border border-gray-700">
                 <h2 className="text-2xl font-bold mb-3 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                    3D Scene
+                    Enhanced 3D Scene
                 </h2>
                 <div className="text-sm space-y-2">
                     <p className="flex items-center">
@@ -660,10 +681,10 @@ const Objects = () => {
                     {selectedObject && (
                         <div className="mt-3 p-2 bg-gray-800 rounded-lg">
                             <p className="text-cyan-300 font-semibold">
-                                Selected: {selectedObject.userData.type}
+                                Selected: {(selectedObject.userData as ObjectUserData).type}
                             </p>
                             <p className="text-xs text-gray-400">
-                                Energy: {selectedObject.userData.energy.toFixed(2)}
+                                Energy: {(selectedObject.userData as ObjectUserData).energy.toFixed(2)}
                             </p>
                         </div>
                     )}
