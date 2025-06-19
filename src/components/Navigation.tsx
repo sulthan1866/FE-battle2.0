@@ -26,7 +26,6 @@ export function Navigation() {
     const navigation = [
         { name: "Home", href: "/" },
         { name: "Products", href: "/products" },
-        { name: "Striking Objects", href: "/striking-objects" },
         { name: "Parallax", href: "parallax" }
     ]
 
