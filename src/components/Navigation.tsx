@@ -26,7 +26,8 @@ export function Navigation() {
     const navigation = [
         { name: "Home", href: "/" },
         { name: "Products", href: "/products" },
-        { name: "Parallax", href: "parallax" }
+        { name: "Parallax", href: "parallax" },
+        { name: "Objects", href: "objects" }
     ]
 
     return (

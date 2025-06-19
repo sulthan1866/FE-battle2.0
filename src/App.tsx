@@ -6,6 +6,7 @@ import ProductsGrid from "./pages/ProductGrid"
 import Parallax from "./pages/Parallax"
 import { useState } from "react"
 import LoadingScreen from "./components/LoadingScreen"
+import Objects from "./pages/Objects"
 function App() {
     const [isLoading, setIsLoading] = useState(true);
     return (
@@ -21,6 +22,7 @@ function App() {
                             <Route path="/" element={<Home />} />
                             <Route path="/products" element={<ProductsGrid />} />
                             <Route path="parallax" element={<Parallax />} />
+                            <Route path="/objects" element={<Objects />} />
                         </Routes>
                     </div>
                 </Router>
